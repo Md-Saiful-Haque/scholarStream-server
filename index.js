@@ -57,8 +57,20 @@ async function run() {
         })
 
         // scholarship related apis
+        app.get('/scholarship', async (req, res) => {
+            const result = await scholarshipsCollection.find().toArray()
+            res.send(result)
+        })
+        
+        app.get('/latest-scholarship', async (req, res) => {
+            const cursor = scholarshipsCollection.find().sort({ createdAt: -1 }).limit(6)
+            const result = await cursor.toArray()
+            res.send(result)
+        })
+
         app.post('/add-scholarship', async (req, res) => {
             const data = req.body
+            data.createdAt = new Date()
             const result = await scholarshipsCollection.insertOne(data)
             res.send(result)
         })
