@@ -9,14 +9,14 @@ const port = process.env.PORT || 3000
 
 app.use(express.json())
 app.use(
-  cors({
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:5174'
-    ],
-    credentials: true,
-    optionSuccessStatus: 200,
-  })
+    cors({
+        origin: [
+            'http://localhost:5173',
+            'http://localhost:5174'
+        ],
+        credentials: true,
+        optionSuccessStatus: 200,
+    })
 )
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nmodl3i.mongodb.net/?appName=Cluster0`;
@@ -46,7 +46,6 @@ async function run() {
             const userInfo = req.body;
             userInfo.role = 'Student';
             userInfo.createdAt = new Date()
-console.log(userInfo)
             const email = userInfo.email
             const userExists = await usersCollection.findOne({ email })
             if (userExists) {
@@ -57,7 +56,12 @@ console.log(userInfo)
             res.send(result)
         })
 
-
+        // scholarship related apis
+        app.post('/add-scholarship', async (req, res) => {
+            const data = req.body
+            const result = await scholarshipsCollection.insertOne(data)
+            res.send(result)
+        })
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
