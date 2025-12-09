@@ -1,7 +1,7 @@
 const express = require('express')
 const cors = require('cors')
 const app = express()
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
 
 const port = process.env.PORT || 3000
@@ -42,6 +42,12 @@ async function run() {
         const reviewsCollection = db.collection('reviews')
 
         // users related apis
+        app.get('/users', async (req, res) => {
+            const adminEmail = req.tokenEmail;
+            const result = await usersCollection.find({ email: { $ne: adminEmail } }).toArray()
+            res.send(result)
+        })
+
         app.post('/users', async (req, res) => {
             const userInfo = req.body;
             userInfo.role = 'Student';
@@ -61,10 +67,17 @@ async function run() {
             const result = await scholarshipsCollection.find().toArray()
             res.send(result)
         })
-        
+
         app.get('/latest-scholarship', async (req, res) => {
             const cursor = scholarshipsCollection.find().sort({ createdAt: -1 }).limit(6)
             const result = await cursor.toArray()
+            res.send(result)
+        })
+
+        app.get('/scholarship/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await scholarshipsCollection.findOne(query)
             res.send(result)
         })
 
@@ -72,6 +85,23 @@ async function run() {
             const data = req.body
             data.createdAt = new Date()
             const result = await scholarshipsCollection.insertOne(data)
+            res.send(result)
+        })
+
+        app.get('/manage-scholarship', async (req, res) => {
+            const result = await scholarshipsCollection.find().toArray()
+            res.send(result)
+        })
+
+        app.put('/update-scholarship/:id', async (req, res) => {
+            const id = req.params.id
+            const data = req.body
+            delete data._id
+            const query = { _id: new ObjectId(id) }
+            const update = {
+                $set: {...data}
+            }
+            const result = await scholarshipsCollection.updateOne(query, update)
             res.send(result)
         })
 
