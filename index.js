@@ -1,8 +1,11 @@
+require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const app = express()
+
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-require('dotenv').config()
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+
 
 const port = process.env.PORT || 3000
 
@@ -20,6 +23,22 @@ app.use(
 )
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nmodl3i.mongodb.net/?appName=Cluster0`;
+
+// jwt middlewares
+const verifyJWT = async (req, res, next) => {
+    const token = req?.headers?.authorization?.split(' ')[1]
+    console.log(token)
+    if (!token) return res.status(401).send({ message: 'Unauthorized Access!' })
+    try {
+        const decoded = await admin.auth().verifyIdToken(token)
+        req.tokenEmail = decoded.email
+        console.log(decoded)
+        next()
+    } catch (err) {
+        console.log(err)
+        return res.status(401).send({ message: 'Unauthorized Access!', err })
+    }
+}
 
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -62,6 +81,14 @@ async function run() {
             res.send(result)
         })
 
+        // get user's role
+        app.get('/users/:email/role', async (req, res) => {
+            const email = req.params.email;
+            const query = { email }
+            const result = await usersCollection.findOne(query)
+            res.send({ role: result?.role })
+        })
+
         // scholarship related apis
         app.get('/scholarship', async (req, res) => {
             const result = await scholarshipsCollection.find().toArray()
@@ -99,11 +126,51 @@ async function run() {
             delete data._id
             const query = { _id: new ObjectId(id) }
             const update = {
-                $set: {...data}
+                $set: { ...data }
             }
             const result = await scholarshipsCollection.updateOne(query, update)
             res.send(result)
         })
+
+        app.delete('/delete-scholarship/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await scholarshipsCollection.deleteOne(query)
+            res.send(result)
+        })
+
+        // payment by stripe
+        app.post('/create-checkout-session', async (req, res) => {
+            const applicantInfo = req.body;
+            await applicationsCollection.insertOne({...applicantInfo})
+            const session = await stripe.checkout.sessions.create({
+                line_items: [
+                    {
+                        price_data: {
+                            currency: 'USD',
+                            unit_amount: parseInt(applicantInfo.applicationFees) * 100,
+                            product_data: {
+                                name: applicantInfo.universityName,
+                                description: applicantInfo.scholarshipName,
+                                images: [applicantInfo.image]
+                            }
+                        },
+                        quantity: 1
+                    },
+                ],
+                customer_email: applicantInfo.userEmail,
+                mode: 'payment',
+                metadata: {
+                    scholarshipId: applicantInfo.scholarshipId,
+                    customer: applicantInfo.userEmail
+                },
+                success_url: `${process.env.CLIENT_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${process.env.CLIENT_DOMAIN}/plant/${applicantInfo.scholarshipId}`,
+            })
+            res.send({ url: session.url })
+        })
+
+
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
