@@ -142,7 +142,31 @@ async function run() {
         // payment by stripe
         app.post('/create-checkout-session', async (req, res) => {
             const applicantInfo = req.body;
-            await applicationsCollection.insertOne({...applicantInfo})
+
+            const alreadyApplied = await applicationsCollection.findOne({
+                scholarshipId: applicantInfo.scholarshipId,
+                userEmail: applicantInfo.userEmail,
+                paymentStatus: "paid"
+            });
+
+            if (alreadyApplied) {
+                return res.status(409).send({
+                    message: "❌ You already applied for this scholarship!"
+                });
+            }
+
+            //await applicationsCollection.insertOne({ ...applicantInfo, paymentStatus: "unpaid" })
+
+            const unpaid = await applicationsCollection.findOne({
+                scholarshipId: applicantInfo.scholarshipId,
+                userEmail: applicantInfo.userEmail,
+                paymentStatus: "unpaid"
+            });
+
+            if (!unpaid) {
+                await applicationsCollection.insertOne(applicantInfo);
+            }
+
             const session = await stripe.checkout.sessions.create({
                 line_items: [
                     {
@@ -169,6 +193,85 @@ async function run() {
             })
             res.send({ url: session.url })
         })
+
+        app.post('/payment-success', async (req, res) => {
+
+            const { sessionId } = req.body;
+
+            const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+            if (session.payment_status !== "paid") {
+                return res.send({ success: false });
+            }
+
+            const alreadyExist = await applicationsCollection.findOne({
+                transactionId: session.payment_intent
+            });
+
+            if (alreadyExist) {
+                return res.send({ message: "Already Exist" });
+            }
+
+            await applicationsCollection.updateOne(
+                {
+                    scholarshipId: session.metadata.scholarshipId,
+                    userEmail: session.metadata.customer,
+                    paymentStatus: "unpaid"
+                },
+                {
+                    $set: {
+                        paymentStatus: "paid",
+                        transactionId: session.payment_intent,
+                        paidAmount: session.amount_total / 100
+                    }
+                }
+            );
+
+            res.send({
+                success: true,
+                transactionId: session.payment_intent
+            });
+        });
+
+
+        // app.get('/payment-success/:sessionId', async (req, res) => {
+        //     const sessionId = req.params.sessionId;
+
+        //     try {
+        //         const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        //         // Payment success check
+        //         if (session.payment_status === "paid") {
+        //             const email = session.customer_email;
+        //             await applicationsCollection.updateOne(
+        //                 { userEmail: email, paymentStatus: "unpaid" },
+        //                 {
+        //                     $set: {
+        //                         paymentStatus: "paid"
+        //                     }
+        //                 }
+        //             )
+        //             res.send({ success: true })
+        //         }
+        //         else {
+        //             res.send({ success: false })
+
+        //         }
+        //     } catch (error) {
+        //         res.status(500).send({
+        //             success: false,
+        //             message: error.message
+        //         })
+        //     }
+        // })
+
+        
+        app.get('/my-applications/:email', async (req, res) => {
+            const email = req.params.email;
+            const result = await applicationsCollection.find({ userEmail: email }).toArray()
+            res.send(result)
+        })
+
 
 
 
