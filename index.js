@@ -233,44 +233,30 @@ async function run() {
             });
         });
 
-
-        // app.get('/payment-success/:sessionId', async (req, res) => {
-        //     const sessionId = req.params.sessionId;
-
-        //     try {
-        //         const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-        //         // Payment success check
-        //         if (session.payment_status === "paid") {
-        //             const email = session.customer_email;
-        //             await applicationsCollection.updateOne(
-        //                 { userEmail: email, paymentStatus: "unpaid" },
-        //                 {
-        //                     $set: {
-        //                         paymentStatus: "paid"
-        //                     }
-        //                 }
-        //             )
-        //             res.send({ success: true })
-        //         }
-        //         else {
-        //             res.send({ success: false })
-
-        //         }
-        //     } catch (error) {
-        //         res.status(500).send({
-        //             success: false,
-        //             message: error.message
-        //         })
-        //     }
-        // })
-
-        
+        // get my applications
         app.get('/my-applications/:email', async (req, res) => {
             const email = req.params.email;
             const result = await applicationsCollection.find({ userEmail: email }).toArray()
             res.send(result)
         })
+
+        // get all aplication for modaretor
+        app.get('/all-applications', async (req, res) => {
+            const result = await applicationsCollection.find().toArray()
+            res.send(result)
+        })
+
+        // update feedback by modaretor
+        app.patch("/applications/feedback/:id", async (req, res) => {
+            const { feedback } = req.body;
+
+            const result = await applicationsCollection.updateOne(
+                { _id: new ObjectId(req.params.id) },
+                { $set: { feedback } }
+            );
+
+            res.send(result);
+        });
 
 
 
