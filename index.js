@@ -258,6 +258,25 @@ async function run() {
             res.send(result);
         });
 
+        // update application status by modaretor
+        app.patch('/update-status/:id', async (req, res) => {
+            const { status } = req.body;
+            const result = await applicationsCollection.updateOne(
+                { _id: new ObjectId(req.params.id) },
+                { $set: { applicationStatus: status } }
+            );
+
+            res.send(result);
+        });
+
+        // delete application by modaretor
+        app.delete('/delete-application/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await applicationsCollection.deleteOne(query)
+            res.send(result)
+        })
+
 
 
 
