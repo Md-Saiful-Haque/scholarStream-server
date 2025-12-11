@@ -91,7 +91,17 @@ async function run() {
 
         // scholarship related apis
         app.get('/scholarship', async (req, res) => {
-            const result = await scholarshipsCollection.find().toArray()
+            const search = req.query.search
+            const query = search
+                ? {
+                    $or: [
+                        { scholarshipName: { $regex: search, $options: "i" } },
+                        { universityName: { $regex: search, $options: "i" } },
+                        { degree: { $regex: search, $options: "i" } }
+                    ]
+                }
+                : {};
+            const result = await scholarshipsCollection.find(query).toArray()
             res.send(result)
         })
 
@@ -269,11 +279,56 @@ async function run() {
             res.send(result);
         });
 
-        // delete application by modaretor
-        app.delete('/delete-application/:id', async (req, res) => {
+        // cancel application by modaretor
+        app.patch('/rejected-application/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
-            const result = await applicationsCollection.deleteOne(query)
+            const result = await applicationsCollection.updateOne(query, { $set: { applicationStatus: 'rejected' } })
+            res.send(result)
+        })
+
+        // add reviews
+        app.post('/add-reviews', async (req, res) => {
+            const reviewInfo = req.body;
+            reviewInfo.createdAt = new Date();
+            const result = await reviewsCollection.insertOne(reviewInfo);
+            res.send(result)
+        })
+
+        app.get('/my-reviews/:email', async (req, res) => {
+            const email = req.params.email;
+            const result = await reviewsCollection.find({ userEmail: email }).toArray()
+            res.send(result)
+        })
+
+        // update my review
+        app.patch('/update-reviews/:id', async (req, res) => {
+            const id = req.params.id;
+            const { ratingPoint, reviewComment } = req.body;
+
+            const result = await reviewsCollection.updateOne(
+                { _id: new ObjectId(id) },
+                {
+                    $set: {
+                        ratingPoint,
+                        reviewComment
+                    },
+                }
+            );
+
+            res.send(result);
+        });
+
+        // get all reviews
+        app.get('/all-reviews', async (req, res) => {
+            const result = await reviewsCollection.find().toArray()
+            res.send(result)
+        })
+
+        // get review to show scholarship details page
+        app.get('/reviews/:id', async (req, res) => {
+            const id = req.params.id;
+            const result = await reviewsCollection.find({ scholarshipId: id }).toArray()
             res.send(result)
         })
 
