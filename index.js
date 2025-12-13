@@ -89,8 +89,29 @@ async function run() {
             res.send({ role: result?.role })
         })
 
+        app.delete('/delete-user/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await usersCollection.deleteOne(query)
+            res.send(result)
+        })
+
+        // update application role by admin
+        app.patch('/update-role/:id', async (req, res) => {
+            const { role } = req.body;
+            const result = await usersCollection.updateOne(
+                { _id: new ObjectId(req.params.id) },
+                { $set: { role: role } }
+            );
+
+            res.send(result);
+        });
+
         // scholarship related apis
         app.get('/scholarship', async (req, res) => {
+            const page = parseInt(req.query.page) || 1;
+            const limit = 6;
+            const skip = (page - 1) * limit;
             const search = req.query.search
             const query = search
                 ? {
@@ -101,8 +122,11 @@ async function run() {
                     ]
                 }
                 : {};
-            const result = await scholarshipsCollection.find(query).toArray()
-            res.send(result)
+            const total = await scholarshipsCollection.countDocuments(query);
+
+            const result = await scholarshipsCollection.find(query).skip(skip).limit(limit).toArray()
+
+            res.send({result, total})
         })
 
         app.get('/latest-scholarship', async (req, res) => {
