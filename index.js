@@ -5,9 +5,18 @@ const app = express()
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
-
+const admin = require("firebase-admin");
 
 const port = process.env.PORT || 3000
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString(
+    'utf-8'
+)
+const serviceAccount = JSON.parse(decoded);
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+
 
 
 app.use(express.json())
@@ -40,7 +49,7 @@ const verifyJWT = async (req, res, next) => {
     }
 }
 
-
+//{ email: { $ne: adminEmail } }
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
     serverApi: {
@@ -61,9 +70,9 @@ async function run() {
         const reviewsCollection = db.collection('reviews')
 
         // users related apis
-        app.get('/users', async (req, res) => {
+        app.get('/users', verifyJWT, async (req, res) => {
             const adminEmail = req.tokenEmail;
-            const result = await usersCollection.find({ email: { $ne: adminEmail } }).toArray()
+            const result = await usersCollection.find().toArray()
             res.send(result)
         })
 
@@ -126,7 +135,7 @@ async function run() {
 
             const result = await scholarshipsCollection.find(query).skip(skip).limit(limit).toArray()
 
-            res.send({result, total})
+            res.send({ result, total })
         })
 
         app.get('/latest-scholarship', async (req, res) => {
@@ -142,7 +151,7 @@ async function run() {
             res.send(result)
         })
 
-        app.post('/add-scholarship', async (req, res) => {
+        app.post('/add-scholarship', verifyJWT, async (req, res) => {
             const data = req.body
             data.createdAt = new Date()
             const result = await scholarshipsCollection.insertOne(data)
@@ -265,6 +274,41 @@ async function run() {
                 success: true,
                 transactionId: session.payment_intent
             });
+        });
+
+        app.get('/admin/analytics', async (req, res) => {
+            const totalUsers = await usersCollection.countDocuments();
+            const totalScholarships = await scholarshipsCollection.countDocuments();
+            const pipeline = [
+                {
+                    $group: {
+                        _id: 'applicationFees',
+                        count: {
+                            $sum: '$applicationFees'                            
+                        }
+                    }
+                }
+            ]
+            const result = await applicationsCollection.aggregate(pipeline).toArray()
+            res.send({
+                totalUsers,
+                totalScholarships,
+                result
+            })
+        })
+
+
+        app.get('/admin/applications-chart', async (req, res) => {
+            const result = await applicationsCollection.aggregate([
+                {
+                    $group: {
+                        _id: "$universityName",
+                        count: { $sum: 1 }
+                    }
+                }
+            ]).toArray();
+
+            res.send(result);
         });
 
         // get my applications
