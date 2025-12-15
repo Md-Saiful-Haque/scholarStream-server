@@ -121,6 +121,7 @@ async function run() {
             const page = parseInt(req.query.page) || 1;
             const limit = 6;
             const skip = (page - 1) * limit;
+            const country = req.query.country;
             const search = req.query.search
             const query = search
                 ? {
@@ -131,9 +132,13 @@ async function run() {
                     ]
                 }
                 : {};
+
+            if (country) {
+                query.country = country;
+            }
             const total = await scholarshipsCollection.countDocuments(query);
 
-            const result = await scholarshipsCollection.find(query).skip(skip).limit(limit).toArray()
+            const result = await scholarshipsCollection.find(query).sort({ applicationFees: -1 }).skip(skip).limit(limit).toArray()
 
             res.send({ result, total })
         })
@@ -229,10 +234,12 @@ async function run() {
                 mode: 'payment',
                 metadata: {
                     scholarshipId: applicantInfo.scholarshipId,
-                    customer: applicantInfo.userEmail
+                    customer: applicantInfo.userEmail,
+                    scholarshipName: applicantInfo.scholarshipName,
+                    universityName: applicantInfo.universityName
                 },
                 success_url: `${process.env.CLIENT_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-                cancel_url: `${process.env.CLIENT_DOMAIN}/plant/${applicantInfo.scholarshipId}`,
+                cancel_url: `${process.env.CLIENT_DOMAIN}/payment-failed/${applicantInfo._id}`,
             })
             res.send({ url: session.url })
         })
@@ -242,6 +249,7 @@ async function run() {
             const { sessionId } = req.body;
 
             const session = await stripe.checkout.sessions.retrieve(sessionId);
+
 
             if (session.payment_status !== "paid") {
                 return res.send({ success: false });
@@ -272,7 +280,14 @@ async function run() {
 
             res.send({
                 success: true,
-                transactionId: session.payment_intent
+                data: {
+                    transactionId: session.payment_intent,
+                    sessionId,
+                    scholarshipName: session.metadata.scholarshipName,
+                    universityName: session.metadata.universityName,
+                    paidAmount: session.amount_total / 100
+                }
+
             });
         });
 
@@ -284,7 +299,7 @@ async function run() {
                     $group: {
                         _id: 'applicationFees',
                         count: {
-                            $sum: '$applicationFees'                            
+                            $sum: '$applicationFees'
                         }
                     }
                 }
@@ -315,6 +330,13 @@ async function run() {
         app.get('/my-applications/:email', async (req, res) => {
             const email = req.params.email;
             const result = await applicationsCollection.find({ userEmail: email }).toArray()
+            res.send(result)
+        })
+
+        app.get('/payment-failed/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await applicationsCollection.findOne(query)
             res.send(result)
         })
 
