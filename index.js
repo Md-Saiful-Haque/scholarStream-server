@@ -50,7 +50,6 @@ const verifyJWT = async (req, res, next) => {
 }
 
 //{ email: { $ne: adminEmail } }
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -69,8 +68,29 @@ async function run() {
         const applicationsCollection = db.collection('applications')
         const reviewsCollection = db.collection('reviews')
 
+        // middleware with database access
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.tokenEmail
+            const query = { email };
+            const user = await usersCollection.findOne(query);
+            if (!user || user.role !== 'Admin') {
+                res.status(403).send({ message: 'forbidden access' })
+            }
+            next()
+        }
+
+        const verifyModerator = async (req, res, next) => {
+            const email = req.tokenEmail
+            const query = { email };
+            const user = await usersCollection.findOne(query);
+            if (!user || user.role !== 'Moderator') {
+                res.status(403).send({ message: 'forbidden access' })
+            }
+            next()
+        }
+
         // users related apis
-        app.get('/users', verifyJWT, async (req, res) => {
+        app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
             const adminEmail = req.tokenEmail;
             const result = await usersCollection.find().toArray()
             res.send(result)
@@ -91,7 +111,7 @@ async function run() {
         })
 
         // get user's role
-        app.get('/users/:email/role', async (req, res) => {
+        app.get('/users/:email/role', verifyJWT, async (req, res) => {
             const email = req.params.email;
             const query = { email }
             const result = await usersCollection.findOne(query)
@@ -156,14 +176,14 @@ async function run() {
             res.send(result)
         })
 
-        app.post('/add-scholarship', verifyJWT, async (req, res) => {
+        app.post('/add-scholarship', verifyJWT, verifyAdmin, async (req, res) => {
             const data = req.body
             data.createdAt = new Date()
             const result = await scholarshipsCollection.insertOne(data)
             res.send(result)
         })
 
-        app.get('/manage-scholarship', async (req, res) => {
+        app.get('/manage-scholarship', verifyAdmin, async (req, res) => {
             const result = await scholarshipsCollection.find().toArray()
             res.send(result)
         })
@@ -291,7 +311,7 @@ async function run() {
             });
         });
 
-        app.get('/admin/analytics', async (req, res) => {
+        app.get('/admin/analytics', verifyAdmin, async (req, res) => {
             const totalUsers = await usersCollection.countDocuments();
             const totalScholarships = await scholarshipsCollection.countDocuments();
             const pipeline = [
@@ -341,13 +361,13 @@ async function run() {
         })
 
         // get all aplication for modaretor
-        app.get('/all-applications', async (req, res) => {
+        app.get('/all-applications', verifyJWT, verifyModerator, async (req, res) => {
             const result = await applicationsCollection.find().toArray()
             res.send(result)
         })
 
         // update feedback by modaretor
-        app.patch("/applications/feedback/:id", async (req, res) => {
+        app.patch("/applications/feedback/:id", verifyModerator, async (req, res) => {
             const { feedback } = req.body;
 
             const result = await applicationsCollection.updateOne(
@@ -359,7 +379,7 @@ async function run() {
         });
 
         // update application status by modaretor
-        app.patch('/update-status/:id', async (req, res) => {
+        app.patch('/update-status/:id', verifyModerator, async (req, res) => {
             const { status } = req.body;
             const result = await applicationsCollection.updateOne(
                 { _id: new ObjectId(req.params.id) },
@@ -370,7 +390,7 @@ async function run() {
         });
 
         // cancel application by modaretor
-        app.patch('/rejected-application/:id', async (req, res) => {
+        app.patch('/rejected-application/:id', verifyModerator, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await applicationsCollection.updateOne(query, { $set: { applicationStatus: 'rejected' } })
@@ -410,7 +430,7 @@ async function run() {
         });
 
         // get all reviews
-        app.get('/all-reviews', async (req, res) => {
+        app.get('/all-reviews', verifyModerator, async (req, res) => {
             const result = await reviewsCollection.find().toArray()
             res.send(result)
         })
