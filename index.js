@@ -24,7 +24,8 @@ app.use(
     cors({
         origin: [
             'http://localhost:5173',
-            'http://localhost:5174'
+            'http://localhost:5174',
+            'https://scholar-stream-da98b.web.app'
         ],
         credentials: true,
         optionSuccessStatus: 200,
@@ -60,7 +61,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        await client.connect();
+        //await client.connect();
 
         const db = client.db('scholarStreamDB')
         const usersCollection = db.collection('users')
@@ -142,6 +143,7 @@ async function run() {
             const limit = 6;
             const skip = (page - 1) * limit;
             const country = req.query.country;
+            const sort = req.query.sort;
             const search = req.query.search
             const query = search
                 ? {
@@ -156,9 +158,19 @@ async function run() {
             if (country) {
                 query.country = country;
             }
+
+            let sortOption = {};
+            if (sort === "fees_desc") {
+                sortOption = { applicationFees: -1 };
+            } else if (sort === "fees_asc") {
+                sortOption = { applicationFees: 1 };
+            } else if (sort === "date_desc") {
+                sortOption = { postDate: -1 };
+            }
+
             const total = await scholarshipsCollection.countDocuments(query);
 
-            const result = await scholarshipsCollection.find(query).sort({ applicationFees: -1 }).skip(skip).limit(limit).toArray()
+            const result = await scholarshipsCollection.find(query).sort(sortOption).skip(skip).limit(limit).toArray()
 
             res.send({ result, total })
         })
@@ -183,7 +195,7 @@ async function run() {
             res.send(result)
         })
 
-        app.get('/manage-scholarship', verifyAdmin, async (req, res) => {
+        app.get('/manage-scholarship', verifyJWT, verifyAdmin, async (req, res) => {
             const result = await scholarshipsCollection.find().toArray()
             res.send(result)
         })
@@ -311,7 +323,7 @@ async function run() {
             });
         });
 
-        app.get('/admin/analytics', verifyAdmin, async (req, res) => {
+        app.get('/admin/analytics', verifyJWT, verifyAdmin, async (req, res) => {
             const totalUsers = await usersCollection.countDocuments();
             const totalScholarships = await scholarshipsCollection.countDocuments();
             const pipeline = [
@@ -367,7 +379,7 @@ async function run() {
         })
 
         // update feedback by modaretor
-        app.patch("/applications/feedback/:id", verifyModerator, async (req, res) => {
+        app.patch("/applications/feedback/:id", verifyJWT, verifyModerator, async (req, res) => {
             const { feedback } = req.body;
 
             const result = await applicationsCollection.updateOne(
@@ -379,7 +391,7 @@ async function run() {
         });
 
         // update application status by modaretor
-        app.patch('/update-status/:id', verifyModerator, async (req, res) => {
+        app.patch('/update-status/:id', verifyJWT, verifyModerator, async (req, res) => {
             const { status } = req.body;
             const result = await applicationsCollection.updateOne(
                 { _id: new ObjectId(req.params.id) },
@@ -390,7 +402,7 @@ async function run() {
         });
 
         // cancel application by modaretor
-        app.patch('/rejected-application/:id', verifyModerator, async (req, res) => {
+        app.patch('/rejected-application/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await applicationsCollection.updateOne(query, { $set: { applicationStatus: 'rejected' } })
@@ -430,7 +442,7 @@ async function run() {
         });
 
         // get all reviews
-        app.get('/all-reviews', verifyModerator, async (req, res) => {
+        app.get('/all-reviews', verifyJWT, verifyModerator, async (req, res) => {
             const result = await reviewsCollection.find().toArray()
             res.send(result)
         })
@@ -460,8 +472,8 @@ async function run() {
 
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         //await client.close();
     }
