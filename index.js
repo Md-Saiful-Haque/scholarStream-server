@@ -140,9 +140,10 @@ async function run() {
         // scholarship related apis
         app.get('/scholarship', async (req, res) => {
             const page = parseInt(req.query.page) || 1;
-            const limit = 6;
+            const limit = 8;
             const skip = (page - 1) * limit;
             const country = req.query.country;
+            const subjectCategory = req.query.subjectCategory;
             const sort = req.query.sort;
             const search = req.query.search
             const query = search
@@ -157,6 +158,10 @@ async function run() {
 
             if (country) {
                 query.country = country;
+            }
+
+            if (subjectCategory) {
+                query.subjectCategory = subjectCategory;
             }
 
             let sortOption = {};
